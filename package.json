@@ -1,0 +1,42 @@
+{
+  "name": "multi-file-rename",
+  "version": "1.0.0",
+  "description": "Batch rename multiple files with customizable templates and preview",
+  "main": "src/main/index.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "cross-env NODE_ENV=development electron .",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder --win portable",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "devDependencies": {
+    "cross-env": "^7.0.3",
+    "electron": "^28.3.3",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.uhiyamind.multifilerenamer",
+    "productName": "Multi File Rename",
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": [
+        "portable"
+      ]
+    },
+    "portable": {
+      "artifactName": "MultiFileRename.exe"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "electronVersion": "28.3.3",
+    "forceCodeSigning": false,
+    "compression": "normal"
+  },
+  "author": "Uhiyamind",
+  "license": "MIT"
+}
