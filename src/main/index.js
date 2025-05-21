@@ -98,24 +98,49 @@ ipcMain.handle("set-config", (event, key, value) => {
   return true;
 });
 
+// フォルダ内のアイテムを取得するIPC
+ipcMain.handle("get-folder-items", async (event, folderPath) => {
+  try {
+    const items = await fs.promises.readdir(folderPath);
+    return items;
+  } catch (error) {
+    console.error(`Error reading folder ${folderPath}:`, error);
+    return null;
+  }
+});
+
+// パスがディレクトリかどうかを判定するIPC
+ipcMain.handle("is-directory", async (event, itemPath) => {
+  try {
+    const stats = await fs.promises.stat(itemPath);
+    return stats.isDirectory();
+  } catch (error) {
+    // statに失敗した場合 (例: シンボリックリンクが切れているなど) はディレクトリではないとみなす
+    // console.error(`Error stating path ${itemPath}:`, error);
+    return false;
+  }
+});
+
 /**
  * ファイル名変更処理を最適化
  * - 重複チェックは送信されたデータでレンダラープロセスですでに行っている
  * - 非同期処理を使用してパフォーマンスを向上
  * - プログレス通知を実装
  */
-ipcMain.handle("rename-files", async (event, { filePaths, renamedNames }) => {
+ipcMain.handle("rename-files", async (event, filesToRename, mode, options) => {
+  // 引数の構造を変更: filesToRename, mode, options
+  // options には template, startNumber, droppedFolderPath などが含まれる
   try {
-    // 既存ファイルの確認
+    // 既存ファイルの確認 (これは現在のロジックのままで良さそう)
     const existingFiles = [];
-    for (let i = 0; i < filePaths.length; i++) {
-      const srcPath = filePaths[i];
-      const fileName = renamedNames[i];
+    for (let i = 0; i < filesToRename.length; i++) {
+      const srcPath = filesToRename[i].originalPath;
+      const newNameWithExt = filesToRename[i].newName; // newNameには拡張子が含まれている想定
       const dirName = path.dirname(srcPath);
-      const destPath = path.join(dirName, fileName);
+      const destPath = path.join(dirName, newNameWithExt);
 
       if (srcPath !== destPath && fs.existsSync(destPath)) {
-        existingFiles.push(fileName);
+        existingFiles.push(newNameWithExt);
       }
     }
 
@@ -131,40 +156,41 @@ ipcMain.handle("rename-files", async (event, { filePaths, renamedNames }) => {
     }
 
     // リネーム処理の実行
-    const totalFiles = filePaths.length;
+    const totalFiles = filesToRename.length;
     let processedFiles = 0;
 
-    // ファイルを小さなバッチに分割して処理
     const batchSize = 50;
-    for (let i = 0; i < filePaths.length; i += batchSize) {
-      const batch = filePaths.slice(i, i + batchSize);
-      const batchNames = renamedNames.slice(i, i + batchSize);
+    for (let i = 0; i < filesToRename.length; i += batchSize) {
+      const batch = filesToRename.slice(i, i + batchSize);
 
       await Promise.all(
-        batch.map(async (srcPath, index) => {
-          const fileName = batchNames[index];
+        batch.map(async (file) => {
+          const srcPath = file.originalPath;
+          const newNameWithExt = file.newName;
           const dirName = path.dirname(srcPath);
-          const destPath = path.join(dirName, fileName);
+          const destPath = path.join(dirName, newNameWithExt);
 
           try {
+            // フォルダリネームモードの場合、対象がフォルダであればフォルダ名を変更
+            // そうでなければファイル名を変更
+            // このサンプルでは、フォルダ内のアイテムはファイルのみを想定しているため、
+            // フォルダ自体のリネームは考慮しない。アイテムがフォルダの場合もファイルとしてリネームする。
             await fs.promises.rename(srcPath, destPath);
             processedFiles++;
 
-            // プログレス通知
             event.sender.send("rename-progress", {
               current: processedFiles,
               total: totalFiles,
               percentage: Math.round((processedFiles / totalFiles) * 100),
-              currentFile: fileName,
+              currentFile: newNameWithExt,
             });
           } catch (error) {
-            console.error(`Error renaming ${srcPath}:`, error);
-            throw error;
+            console.error(`Error renaming ${srcPath} to ${destPath}:`, error);
+            // 1つのファイルのエラーで全体を止めない場合は、エラーを収集して後で返すなどの処理が必要
+            throw error; // ここではエラーが発生したら処理を中断
           }
         })
       );
-
-      // 各バッチ処理後に少し待機してUIの更新を許可
       await new Promise((resolve) => setTimeout(resolve, 10));
     }
 

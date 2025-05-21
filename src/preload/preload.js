@@ -4,17 +4,25 @@ const { contextBridge, ipcRenderer } = require("electron");
 // the ipcRenderer without exposing the entire object
 contextBridge.exposeInMainWorld("api", {
   // File operations
-  renameFiles: async (filePaths, renamedNames) => {
-    return await ipcRenderer.invoke("rename-files", {
-      filePaths,
-      renamedNames,
-    });
+  renameFiles: async (filesToRename, mode, options) => {
+    return await ipcRenderer.invoke(
+      "rename-files",
+      filesToRename,
+      mode,
+      options
+    );
   },
   selectFiles: () => {
     return ipcRenderer.invoke("select-files");
   },
   getSupportedExtensions: () => {
     return ipcRenderer.invoke("get-supported-extensions");
+  },
+  getFolderItems: (folderPath) => {
+    return ipcRenderer.invoke("get-folder-items", folderPath);
+  },
+  isDirectory: (itemPath) => {
+    return ipcRenderer.invoke("is-directory", itemPath);
   },
 
   // Config operations
